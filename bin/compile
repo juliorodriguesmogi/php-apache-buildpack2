@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+################################################################################
+# bin/compile <build-dir> <cache-dir>                                          #
+################################################################################
+
+# ---------------------------------------------------------------------------- #
+# Variables                          	                                       #
+# ---------------------------------------------------------------------------- #
+BIN_DIR=$(dirname $0)
+BUILDPACK_DIR=`cd $(dirname $0); cd ..; pwd`
+BUILD_DIR=$1
+CACHE_DIR=$2
+
+APACHE_VERSION="2.4.23-2"
+APACHE_PATH="apache-2.4.23-2"
+PHP_VERSION="5.6.27"
+PHP_PATH="php-5.6.27"
+
+# ---------------------------------------------------------------------------- #
+# app/www							                                           #
+# ---------------------------------------------------------------------------- #
+cd $BUILD_DIR
+
+mkdir -p $CACHE_DIR/www
+mkdir $CACHE_DIR/www/session
+mkdir $CACHE_DIR/www/tmp
+chmod 777 $CACHE_DIR/www/session -R
+chmod 777 $CACHE_DIR/www/tmp -R
+mv * $CACHE_DIR/www
+mv $CACHE_DIR/www .
+# CLIDRIVER for IBMDB2
+
+DB2CLI_DIR="${BUILDPACK_DIR}/download/ibm_data_server_driver_package_linuxx64_v10.5.tar.gz"
+echo "----> Building DB2 drivers "+"${BUILDPACK_DIR}"
+tar -zxf $DB2CLI_DIR
+cd dsdriver
+chmod 775 * -R
+
+
+cd ..
+
+# ---------------------------------------------------------------------------- #
+# Apache HTTP Server                                                           #
+# ---------------------------------------------------------------------------- #
+echo "copying...."
+APACHE_DIR="${BUILDPACK_DIR}/download/httpd/2.4/apache-$APACHE_VERSION.1.tar.gz"
+echo "-----> Bundling Apache version $APACHE_VERSION"
+tar -zxf $APACHE_DIR
+# Removing any previous log
+rm /app/$APACHE_PATH/logs/*.* -fr
+ls -la $APACHE_PATH/logs 
+
+# ---------------------------------------------------------------------------- #
+#  PHP                                                                         #
+# ---------------------------------------------------------------------------- #
+PHP_DIR="${BUILDPACK_DIR}/download/php/5.6/php-$PHP_VERSION.tar.gz"
+echo "-----> Bundling PHP version $PHP_VERSION"
+tar -xzf $PHP_DIR 
+mkdir $PHP_PATH/session
+chmod 777 $PHP_PATH/session -R
+
+# ---------------------------------------------------------------------------- #
+# httpd.conf   php.ini                                                         #
+# ---------------------------------------------------------------------------- #
+ls -al $BUILDPACK_DIR
+cp $BUILDPACK_DIR/config/httpd.conf $APACHE_PATH/conf
+cp $BUILDPACK_DIR/config/php.ini $PHP_PATH
+
+# ---------------------------------------------------------------------------- #
+# php                                                                          #
+# ---------------------------------------------------------------------------- #
+mkdir -p bin
+ln -s /app/php-$PHP_VERSION/sapi/cli/php bin/php
+
+# ---------------------------------------------------------------------------- #
+# Apache HTTP Server (boot.sh)                                                 #
+# ---------------------------------------------------------------------------- #
+cat << EOF > boot.sh
+for var in \`env|cut -f1 -d=\`; do
+  echo "PassEnv \$var" >> /app/$APACHE_PATH/config/httpd.conf;
+done
+touch /app/$APACHE_PATH/logs/error_log
+touch /app/$APACHE_PATH/logs/access_log
+tail -F /app/$APACHE_PATH/logs/error_log &
+tail -F /app/$APACHE_PATH/logs/access_log &
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/app/$PHP_PATH/ext:/app/$APACHE_PATH/modules:/app/$PHP_PATH/sapi/cli:/app/dsdriver/include:/app/dsdriver/lib
+export IBM_DB_HOME=/app/dsdriver
+/app/db2driver/./db2profile
+export PHP_INI_SCAN_DIR=/app/www
+echo "Launching apache"
+exec /app/$APACHE_PATH/bin/httpd -DNO_DETACH
+EOF
+
+chmod +x boot.sh
+# ---------------------------------------------------------------------------- #
+# CLEANING UP                                                                  #
+# ---------------------------------------------------------------------------- #
+#rm -rf $CACHE_DIR
+
+
+
+
