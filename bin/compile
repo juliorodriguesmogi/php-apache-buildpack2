@@ -30,19 +30,54 @@ mv * $CACHE_DIR/www
 mv $CACHE_DIR/www .
 # CLIDRIVER for IBMDB2
 
-DB2CLI_DIR="${BUILDPACK_DIR}/download/ibm_data_server_driver_package_linuxx64_v10.5.tar.gz"
-echo "----> Building DB2 drivers "+"${BUILDPACK_DIR}"
-tar -zxf $DB2CLI_DIR
-cd dsdriver
-chmod 775 * -R
+  CLI_URL="https://public.dhe.ibm.com/ibmdl/export/pub/software/data/db2/drivers/odbc_cli/linuxx64_odbc_cli.tar.gz"
+
+  echo "Downloading IBM Data Server Driver...."
+  curl -LO "$CLI_URL"
+
+  # Extracting and Cleaning DS Driver
+  rm -rf clidriver
+  tar -xzf linuxx64_odbc_cli.tar.gz
 
 
-cd ..
+
+  echo "Downloading autoconf..."
+  curl -LO http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
+
+  echo "Downloading m4..."
+  curl -LO http://ftp.gnu.org/pub/gnu/m4/m4-1.4.13.tar.gz
+
+  tar -xzf autoconf-2.69.tar.gz
+  tar -xzf m4-1.4.13.tar.gz
+
+  apt-get install libcurl3-openssl-dev
+
+  echo "Installing m4 and autoconf ..."
+  cd m4-1.4.13
+  ./configure --prefix=$BUILD_DIR/m4
+  make
+  make install
+  export PATH=$BUILD_DIR/m4/bin:$PATH
+
+  cd $BUILD_DIR/autoconf-2.69
+  ./configure --prefix=$BUILD_DIR/autoconf
+  make
+  make install
+
+  cd $BUILD_DIR
+  #Cleaning clidriver, m4 and autoconf
+  rm -rf linuxx64_odbc_cli.tar.gz
+  rm -rf m4-1.4.13.tar.gz
+  rm -rf m4-1.4.13
+  rm -rf autoconf-2.69.tar.gz
+  rm -rf autoconf-2.69
+
+
+
 
 # ---------------------------------------------------------------------------- #
 # Apache HTTP Server                                                           #
 # ---------------------------------------------------------------------------- #
-echo "copying...."
 APACHE_DIR="${BUILDPACK_DIR}/download/httpd/2.4/apache-$APACHE_VERSION.1.tar.gz"
 echo "-----> Bundling Apache version $APACHE_VERSION"
 tar -zxf $APACHE_DIR
@@ -83,9 +118,9 @@ touch /app/$APACHE_PATH/logs/error_log
 touch /app/$APACHE_PATH/logs/access_log
 tail -F /app/$APACHE_PATH/logs/error_log &
 tail -F /app/$APACHE_PATH/logs/access_log &
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/app/$PHP_PATH/ext:/app/$APACHE_PATH/modules:/app/$PHP_PATH/sapi/cli:/app/dsdriver/include:/app/dsdriver/lib
-export IBM_DB_HOME=/app/dsdriver
-/app/db2driver/./db2profile
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/app/$PHP_PATH/ext:/app/$APACHE_PATH/modules:/app/$PHP_PATH/sapi/cli
+export IBM_DB_HOME=/app/clidriver
+/app/clidriver/./db2profile
 export PHP_INI_SCAN_DIR=/app/www
 echo "Launching apache"
 exec /app/$APACHE_PATH/bin/httpd -DNO_DETACH
